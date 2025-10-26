@@ -19,16 +19,16 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import StreamingModal from "@/components/StreamingModal";
+import { getCurrentUserId, getUserStorageKey } from "@/services/userService";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = (width - 40) / 2; // 2 columns with padding
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
-const FAVORITES_KEY = "@movie_app_favorites";
-
 const Save = () => {
   const [favorites, setFavorites] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const router = useRouter();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalMovieId, setModalMovieId] = useState<string | null>(null);
@@ -36,9 +36,17 @@ const Save = () => {
 
   const loadFavorites = async () => {
     try {
-      const savedFavorites = await AsyncStorage.getItem(FAVORITES_KEY);
-      if (savedFavorites) {
-        setFavorites(JSON.parse(savedFavorites));
+      const userId = await getCurrentUserId();
+      setCurrentUserId(userId);
+
+      if (userId) {
+        const favoritesKey = getUserStorageKey(userId, "favorites");
+        const savedFavorites = await AsyncStorage.getItem(favoritesKey);
+        if (savedFavorites) {
+          setFavorites(JSON.parse(savedFavorites));
+        } else {
+          setFavorites([]);
+        }
       }
     } catch (error) {
       console.error("Error loading favorites:", error);
@@ -68,11 +76,18 @@ const Save = () => {
           style: "destructive",
           onPress: async () => {
             try {
+              if (!currentUserId) return;
+
               const updatedFavorites = favorites.filter(
                 (movie) => movie.id !== movieId
               );
+
+              const favoritesKey = getUserStorageKey(
+                currentUserId,
+                "favorites"
+              );
               await AsyncStorage.setItem(
-                FAVORITES_KEY,
+                favoritesKey,
                 JSON.stringify(updatedFavorites)
               );
               setFavorites(updatedFavorites);
@@ -155,7 +170,7 @@ const Save = () => {
             showsVerticalScrollIndicator={false}
             columnWrapperStyle={{
               justifyContent: "space-between",
-              paddingHorizontal: 20,
+              paddingHorizontal: 15,
               marginBottom: 20,
             }}
             contentContainerStyle={{ paddingBottom: 20, paddingTop: 10 }}

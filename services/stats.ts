@@ -1,16 +1,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const STATS_KEY = "@movie_app_stats";
+import { getCurrentUserId, getUserStorageKey } from "./userService";
 
 interface Stats {
   watched: number;
   searches: number;
 }
 
-// Get current stats
+// Get current stats for the active user
 export const getStats = async (): Promise<Stats> => {
   try {
-    const statsJson = await AsyncStorage.getItem(STATS_KEY);
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { watched: 0, searches: 0 };
+    }
+    
+    const statsKey = getUserStorageKey(userId, "stats");
+    const statsJson = await AsyncStorage.getItem(statsKey);
     if (statsJson) {
       return JSON.parse(statsJson);
     }
@@ -21,24 +26,34 @@ export const getStats = async (): Promise<Stats> => {
   }
 };
 
-// Increment watched count
+// Increment watched count for the active user
 export const incrementWatchedCount = async (): Promise<void> => {
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+    
     const stats = await getStats();
     stats.watched += 1;
-    await AsyncStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    
+    const statsKey = getUserStorageKey(userId, "stats");
+    await AsyncStorage.setItem(statsKey, JSON.stringify(stats));
     console.log("Watched count incremented:", stats.watched);
   } catch (error) {
     console.error("Error incrementing watched count:", error);
   }
 };
 
-// Increment search count
+// Increment search count for the active user
 export const incrementSearchCount = async (): Promise<void> => {
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) return;
+    
     const stats = await getStats();
     stats.searches += 1;
-    await AsyncStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    
+    const statsKey = getUserStorageKey(userId, "stats");
+    await AsyncStorage.setItem(statsKey, JSON.stringify(stats));
     console.log("Search count incremented:", stats.searches);
   } catch (error) {
     console.error("Error incrementing search count:", error);

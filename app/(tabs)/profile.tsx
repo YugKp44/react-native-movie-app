@@ -15,19 +15,32 @@ import { useCallback } from "react";
 import { icons } from "@/constants/icons";
 import { images } from "@/constants/images";
 import { getStats } from "@/services/stats";
-
-const USER_DATA_KEY = "@movie_app_user";
+import {
+  getCurrentUserId,
+  getUserStorageKey,
+  updateUser,
+  getUserById,
+  getAllUsers,
+  switchUser,
+  initializeDemoUsers,
+  resetDemoUsers,
+} from "@/services/userService";
 
 interface UserData {
   name: string;
+  avatar?: string;
 }
 
 const Profile = () => {
   const [userData, setUserData] = useState<UserData>({
     name: "Movie Lover",
+    avatar: "👤",
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<UserData>(userData);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+  const [showUserSelector, setShowUserSelector] = useState(false);
   const [stats, setStats] = useState({
     favorites: 0,
     watched: 0,
@@ -35,27 +48,44 @@ const Profile = () => {
   });
 
   useEffect(() => {
-    loadUserData();
-    loadStats();
+    initializeUser();
   }, []);
 
-  const loadUserData = async () => {
+  const initializeUser = async () => {
+    // Initialize demo users if needed
+    await initializeDemoUsers();
+
+    // Load current user
+    const userId = await getCurrentUserId();
+    setCurrentUserId(userId);
+
+    // Load all users for selector
+    const users = await getAllUsers();
+    setAvailableUsers(users);
+
+    if (userId) {
+      await loadUserData(userId);
+      await loadStats(userId);
+    }
+  };
+
+  const loadUserData = async (userId: string) => {
     try {
-      const savedData = await AsyncStorage.getItem(USER_DATA_KEY);
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        setUserData(parsed);
-        setEditedData(parsed);
+      const user = await getUserById(userId);
+      if (user) {
+        setUserData({ name: user.name, avatar: user.avatar || "👤" });
+        setEditedData({ name: user.name, avatar: user.avatar || "👤" });
       }
     } catch (error) {
       console.error("Error loading user data:", error);
     }
   };
 
-  const loadStats = async () => {
+  const loadStats = async (userId: string) => {
     try {
-      // Get favorites count
-      const favorites = await AsyncStorage.getItem("@movie_app_favorites");
+      // Get user-specific favorites count
+      const favoritesKey = getUserStorageKey(userId, "favorites");
+      const favorites = await AsyncStorage.getItem(favoritesKey);
       const favCount = favorites ? JSON.parse(favorites).length : 0;
 
       // Get watched and search counts from stats service
@@ -74,20 +104,67 @@ const Profile = () => {
   // Reload stats when screen is focused
   useFocusEffect(
     useCallback(() => {
-      loadStats();
-    }, [])
+      if (currentUserId) {
+        loadStats(currentUserId);
+      }
+    }, [currentUserId])
   );
 
   const saveUserData = async () => {
     try {
-      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(editedData));
-      setUserData(editedData);
-      setIsEditing(false);
-      Alert.alert("Success", "Profile updated successfully!");
+      if (currentUserId) {
+        await updateUser(currentUserId, { name: editedData.name });
+        setUserData(editedData);
+        setIsEditing(false);
+        Alert.alert("Success", "Profile updated successfully!");
+      }
     } catch (error) {
       console.error("Error saving user data:", error);
       Alert.alert("Error", "Failed to update profile");
     }
+  };
+
+  const handleSwitchUser = async (userId: string) => {
+    await switchUser(userId);
+    setCurrentUserId(userId);
+    await loadUserData(userId);
+    await loadStats(userId);
+    setShowUserSelector(false);
+    Alert.alert(
+      "User Switched",
+      "You are now viewing a different user's profile"
+    );
+  };
+
+  const handleResetDemoUsers = async () => {
+    Alert.alert(
+      "Reset Demo Users",
+      "This will delete old users and create new demo users (Yug, Rohit, Rahul) with unique avatars. Continue?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await resetDemoUsers();
+              // Reload everything
+              await initializeUser();
+              Alert.alert(
+                "Success",
+                "Demo users have been reset with unique avatars!"
+              );
+            } catch (error) {
+              console.error("Error resetting demo users:", error);
+              Alert.alert("Error", "Failed to reset demo users");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const StatCard = ({
@@ -123,7 +200,7 @@ const Profile = () => {
       >
         <View className="px-5 pt-3">
           {/* Header */}
-          <View className="flex-row items-center justify-between mb-8">
+          <View className="flex-row items-center justify-between mb-4">
             <View>
               <Text className="text-3xl font-bold text-white mb-1">
                 My Profile
@@ -151,16 +228,76 @@ const Profile = () => {
             </TouchableOpacity>
           </View>
 
+          {/* User Switcher for Demo */}
+          {availableUsers.length > 1 && (
+            <View className="mb-6">
+              <TouchableOpacity
+                onPress={() => setShowUserSelector(!showUserSelector)}
+                className="bg-dark-100/50 rounded-2xl p-4 border border-secondary/30 flex-row items-center justify-between"
+                activeOpacity={0.7}
+              >
+                <View className="flex-row items-center">
+                  <View className="bg-secondary/20 rounded-full size-12 items-center justify-center mr-3">
+                    <Text className="text-2xl">{userData.avatar || "👤"}</Text>
+                  </View>
+                  <View>
+                    <Text className="text-gray-400 text-xs mb-1">
+                      Demo Mode - Switch User
+                    </Text>
+                    <Text className="text-white font-semibold">
+                      {userData.name}
+                    </Text>
+                  </View>
+                </View>
+                <Text className="text-secondary text-xl">
+                  {showUserSelector ? "▲" : "▼"}
+                </Text>
+              </TouchableOpacity>
+
+              {showUserSelector && (
+                <View className="mt-3 bg-dark-100/70 rounded-2xl border border-gray-800/50 overflow-hidden">
+                  {availableUsers.map((user) => (
+                    <TouchableOpacity
+                      key={user.id}
+                      onPress={() => handleSwitchUser(user.id)}
+                      className={`p-4 border-b border-gray-800/30 flex-row items-center ${
+                        user.id === currentUserId ? "bg-secondary/10" : ""
+                      }`}
+                      activeOpacity={0.7}
+                    >
+                      <View className="bg-secondary/20 rounded-full size-12 items-center justify-center mr-3">
+                        <Text className="text-2xl">{user.avatar || "👤"}</Text>
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-white font-semibold">
+                          {user.name}
+                        </Text>
+                        {user.email && (
+                          <Text className="text-gray-400 text-xs">
+                            {user.email}
+                          </Text>
+                        )}
+                      </View>
+                      {user.id === currentUserId && (
+                        <View className="bg-green-500 rounded-full size-6 items-center justify-center">
+                          <Text className="text-white text-xs font-bold">
+                            ✓
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Profile Avatar Card */}
           <View className="mb-6 bg-dark-100/50 rounded-3xl py-8 border border-gray-800/50">
             <View className="items-center">
               <View className="relative mb-5">
                 <View className="bg-gradient-to-br from-secondary to-red-700 rounded-full size-28 items-center justify-center shadow-lg border-4 border-gray-900/50">
-                  <Image
-                    source={icons.person}
-                    className="size-14"
-                    tintColor="#fff"
-                  />
+                  <Text className="text-6xl">{userData.avatar || "👤"}</Text>
                 </View>
                 {isEditing && (
                   <View className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-2.5 border-3 border-primary shadow-lg">

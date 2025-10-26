@@ -17,8 +17,7 @@ import { icons } from "@/constants/icons";
 import useFetch from "@/services/usefetch";
 import { fetchMovieDetails } from "@/services/api";
 import StreamingModal from "@/components/StreamingModal";
-
-const FAVORITES_KEY = "@movie_app_favorites";
+import { getCurrentUserId, getUserStorageKey } from "@/services/userService";
 
 interface MovieInfoProps {
   label: string;
@@ -39,18 +38,33 @@ const Details = () => {
   const { id } = useLocalSearchParams();
   const [isFavorite, setIsFavorite] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const { data: movie, loading } = useFetch(() =>
     fetchMovieDetails(id as string)
   );
 
   useEffect(() => {
-    checkIfFavorite();
-  }, [movie]);
+    initializeUser();
+  }, []);
+
+  useEffect(() => {
+    if (currentUserId && movie) {
+      checkIfFavorite();
+    }
+  }, [movie, currentUserId]);
+
+  const initializeUser = async () => {
+    const userId = await getCurrentUserId();
+    setCurrentUserId(userId);
+  };
 
   const checkIfFavorite = async () => {
     try {
-      const savedFavorites = await AsyncStorage.getItem(FAVORITES_KEY);
+      if (!currentUserId) return;
+
+      const favoritesKey = getUserStorageKey(currentUserId, "favorites");
+      const savedFavorites = await AsyncStorage.getItem(favoritesKey);
       if (savedFavorites && movie) {
         const favorites = JSON.parse(savedFavorites);
         setIsFavorite(favorites.some((fav: Movie) => fav.id === movie.id));
@@ -61,10 +75,11 @@ const Details = () => {
   };
 
   const toggleFavorite = async () => {
-    if (!movie) return;
+    if (!movie || !currentUserId) return;
 
     try {
-      const savedFavorites = await AsyncStorage.getItem(FAVORITES_KEY);
+      const favoritesKey = getUserStorageKey(currentUserId, "favorites");
+      const savedFavorites = await AsyncStorage.getItem(favoritesKey);
       let favorites = savedFavorites ? JSON.parse(savedFavorites) : [];
 
       if (isFavorite) {
@@ -77,7 +92,7 @@ const Details = () => {
         Alert.alert("Saved", "Movie added to watchlist");
       }
 
-      await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+      await AsyncStorage.setItem(favoritesKey, JSON.stringify(favorites));
       setIsFavorite(!isFavorite);
     } catch (error) {
       console.error("Error toggling favorite:", error);

@@ -100,3 +100,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);
   console.log(`Access from network: http://<your-ip>:${PORT}`);
 });
+
+// Export for Vercel serverless
+module.exports = app;

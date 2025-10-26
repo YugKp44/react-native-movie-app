@@ -2,9 +2,9 @@ import axios from 'axios';
 
 const API_KEY = process.env.EXPO_PUBLIC_MOVIE_API_KEY;
 
-// Use local proxy server to bypass network restrictions
+// Use Vercel deployed proxy server
 const USE_PROXY = true;
-const PROXY_URL = "http://10.137.170.161:3001/api";
+const PROXY_URL = "https://movie-demo-app-neon.vercel.app/api";
 const BASE_URL = USE_PROXY ? PROXY_URL : "https://api.themoviedb.org/3";
 
 // Test basic connectivity
